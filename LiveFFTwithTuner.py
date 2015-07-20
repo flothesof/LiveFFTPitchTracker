@@ -17,7 +17,7 @@ from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as Navigatio
 # class taken from the SciPy 2015 Vispy talk opening example 
 # see https://github.com/vispy/vispy/pull/928
 class MicrophoneRecorder(object):
-    def __init__(self, rate=44100, chunksize=1024):
+    def __init__(self, rate=4000, chunksize=1024):
         self.rate = rate
         self.chunksize = chunksize
         self.p = pyaudio.PyAudio()
@@ -82,7 +82,7 @@ class LiveFFTWidget(QtGui.QWidget):
 
         hbox_gain = QtGui.QHBoxLayout()
         autoGain = QtGui.QLabel('Auto gain')
-        autoGainCheckBox = QtGui.QCheckBox()
+        autoGainCheckBox = QtGui.QCheckBox(checked=True)
         hbox_gain.addWidget(autoGain)
         hbox_gain.addWidget(autoGainCheckBox)
         
@@ -143,13 +143,13 @@ class LiveFFTWidget(QtGui.QWidget):
         self.ax_top = self.main_figure.figure.add_subplot(211)
         self.ax_top.set_ylim(-32768, 32768)
         self.ax_top.set_xlim(0, self.time_vect.max())
-        self.ax_top.set_xlabel(u'time (ms)')
+        self.ax_top.set_xlabel(u'time (ms)', fontsize=6)
 
         # bottom plot
         self.ax_bottom = self.main_figure.figure.add_subplot(212)
         self.ax_bottom.set_ylim(0, 1)
         self.ax_bottom.set_xlim(0, self.freq_vect.max())
-        self.ax_bottom.set_xlabel(u'frequency (Hz)')
+        self.ax_bottom.set_xlabel(u'frequency (Hz)', fontsize=6)
         # line objects        
         self.line_top, = self.ax_top.plot(self.time_vect, 
                                          np.ones_like(self.time_vect))
@@ -161,14 +161,14 @@ class LiveFFTWidget(QtGui.QWidget):
                                               self.ax_bottom.get_ylim(), lw=2)
                                                
         # tight layout
-        plt.tight_layout()
+        #plt.tight_layout()
                                                
     def handleNewData(self):
         """ handles the asynchroneously collected sound chunks """        
         # gets the latest frames        
         frames = self.mic.get_frames()
         
-        if frames != None:
+        if len(frames) > 0:
             # keeps only the last frame
             current_frame = frames[-1]
             # plots the time signal
@@ -182,42 +182,46 @@ class LiveFFTWidget(QtGui.QWidget):
                 #print(np.abs(fft_frame).max())
             self.line_bottom.set_data(self.freq_vect, np.abs(fft_frame))            
             
-            # adds pitch tracking  
-            new_pitch = pitch_hps(current_frame, self.mic.rate,
-                                                      200, 1000, 2)
-            print(new_pitch)
+            #  pitch tracking algorithm
+            new_pitch = compute_pitch_hps(current_frame, self.mic.rate, 
+                                   dF=1)
+            precise_pitch = compute_pitch_hps(current_frame, self.mic.rate, 
+                                   dF=0.05, Fmin=new_pitch * 0.8, Fmax = new_pitch * 1.2)
+            self.ax_bottom.set_title("pitch = {:.2f} Hz".format(precise_pitch))
             self.pitch_line.set_data((new_pitch, new_pitch),
                                      self.ax_bottom.get_ylim())
             # refreshes the plots
             self.main_figure.canvas.draw()
 
-def pitch_hps(waveform, rate, 
-                      min_freq, max_freq, 
-                      harmonics,
-                      frequency_resolution=1.0,
-                      debug=False):
-    # adjusting frequency resolution by zero padding
-    df = rate / float(waveform.size)
-    n = waveform.size * df
-    spectrum = np.fft.rfft(waveform, n=int(n))
-    freqs = np.linspace(0, 0.5, spectrum.size) * rate
-    
-    # computing indices
-    min_index = (freqs > min_freq).nonzero()[0][0]
-    max_index = (freqs < max_freq).nonzero()[0][-1] 
-    
-    # applying algorithm
-    hps = np.zeros_like(spectrum)
-    for i in range(min_index, max_index):
-        ampl = np.abs(spectrum[i])
-        for j in range(2, harmonics + 1):
-            ampl *= np.abs(spectrum[i * j])
-        hps[i] = ampl
-    if debug:
-        return freqs, hps
-    else:
-        return freqs[np.argmax(hps)]
 
+def compute_pitch_hps(x, Fs, dF=None, Fmin=50., Fmax=900., H=5):
+    # default value for dF frequency resolution
+    if dF == None:
+        dF = Fs / x.size
+    
+    # Hamming window apodization
+    x = x.copy()
+    x *= np.hamming(x.size)
+
+    # number of points in FFT to reach the resolution wanted by the user
+    n_fft = np.ceil(Fs / dF)
+
+    # DFT computation
+    X = np.abs(np.fft.fft(x, n=int(n_fft)))
+    
+    # limiting frequency R_max computation
+    R = np.floor(1 + n_fft / 2. / H)
+
+    # computing the indices for min and max frequency
+    N_min = np.ceil(Fmin / Fs * n_fft)
+    N_max = np.floor(Fmax / Fs * n_fft)
+    N_max = min(N_max, R)
+    
+    # harmonic product spectrum computation
+    indices = (np.arange(N_max)[:, np.newaxis] * np.arange(1, H+1)).astype(int)
+    P = np.prod(X[indices.ravel()].reshape(N_max, H), axis=1)
+    ix = np.argmax(P * ((np.arange(P.size) >= N_min) & (np.arange(P.size) <= N_max)))
+    return dF * ix
         
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
