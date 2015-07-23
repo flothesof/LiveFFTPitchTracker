@@ -194,7 +194,7 @@ class LiveFFTWidget(QtGui.QWidget):
             self.main_figure.canvas.draw()
 
 
-def compute_pitch_hps(x, Fs, dF=None, Fmin=50., Fmax=900., H=5):
+def compute_pitch_hps(x, Fs, dF=None, Fmin=30., Fmax=900., H=5):
     # default value for dF frequency resolution
     if dF == None:
         dF = Fs / x.size
