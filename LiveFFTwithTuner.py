@@ -200,7 +200,7 @@ def compute_pitch_hps(x, Fs, dF=None, Fmin=30., Fmax=900., H=5):
         dF = Fs / x.size
     
     # Hamming window apodization
-    x = x.copy()
+    x = np.array(x, dtype=np.double, copy=True)
     x *= np.hamming(x.size)
 
     # number of points in FFT to reach the resolution wanted by the user
