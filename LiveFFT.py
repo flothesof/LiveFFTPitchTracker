@@ -9,7 +9,9 @@ import threading
 import atexit
 import pyaudio
 import numpy as np
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib import figure
 from PyQt4 import QtGui, QtCore
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
@@ -58,7 +60,7 @@ class MicrophoneRecorder(object):
 
 class MplFigure(object):
     def __init__(self, parent):
-        self.figure = plt.figure(facecolor='white')
+        self.figure = figure.Figure(facecolor='white')
         self.canvas = FigureCanvas(self.figure)
         self.toolbar = NavigationToolbar(self.canvas, parent)
 
